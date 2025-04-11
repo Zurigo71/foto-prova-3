@@ -1,0 +1,775 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scatta Foto Veicolo V3</title>
+    <!-- Font Awesome Kit -->
+    <script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
+    <!-- Aggiunte per ZIP e fotocamera -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/FileSaver.js/2.0.5/FileSaver.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/webrtc-adapter@7.7.0/dist/adapter.min.js"></script>
+    <style>
+        /* --- CSS Variables --- */
+        :root {
+            /* ... (keep all existing variables) ... */
+             --gradient-bg: linear-gradient(to right, #48c6ef, #6f86d6);
+             --gradient-button: linear-gradient(to bottom, #5fd3aa, #23a47e);
+             --gradient-add-button: linear-gradient(to bottom, #6f86d6, #48c6ef);
+             --gradient-confirm-button: linear-gradient(to bottom, #6f86d6, #48c6ef);
+             --gradient-back-button: linear-gradient(to right, #6ab7f3, #8a9ee8);
+             --gradient-modal-snap: linear-gradient(to bottom, #5fd3aa, #23a47e);
+             --gradient-modal-close: linear-gradient(to bottom, #f37e7e, #d84a4a);
+             --white-color: #ffffff;
+             --text-color-dark: #333333;
+             --border-color-light: #cccccc;
+             --input-bg-light: #f8f9fa;
+             --shadow-main: 0px 5px 15px rgba(0, 0, 0, 0.12);
+             --shadow-inset: inset -2px -2px 4px rgba(0, 0, 0, 0.08);
+             --shadow-inset-active: inset 3px 3px 6px rgba(0, 0, 0, 0.2);
+             --border-radius-small: 5px;
+             --border-radius-medium: 15px;
+             --border-radius-large: 20px;
+             --border-radius-xlarge: 25px;
+             --transition-speed: 0.2s;
+             /* Use a consistent transition speed for opacity */
+             --transition-speed-opacity: 0.3s; /* Renamed for clarity */
+             --transition-speed-fade: 0.5s;
+             --font-family-main: Arial, Helvetica, sans-serif;
+        }
+
+        /* --- General Styles --- */
+        body {
+            display: flex; justify-content: center; align-items: center; min-height: 100vh;
+            background: var(--gradient-bg); font-family: var(--font-family-main);
+            margin: 0; padding: 10px; box-sizing: border-box;
+           -webkit-user-select: none; -moz-user-select: none; -ms-user-select: none; user-select: none;
+        }
+        /* ... (keep other general styles: .container, body.modal-open, h2, etc.) ... */
+         .container {
+             background: var(--white-color); padding: 25px; border-radius: var(--border-radius-medium);
+             box-shadow: var(--shadow-main); text-align: center; position: relative;
+             width: 95%; max-width: 600px; box-sizing: border-box; overflow: hidden;
+             transition: filter 0.3s ease;
+         }
+         body.modal-open .container { filter: blur(3px); pointer-events: none; }
+         h2 {
+             margin-top: 0; margin-bottom: 25px; color: var(--text-color-dark);
+             display: flex; align-items: center; justify-content: center; gap: 10px; font-weight: 600; font-size: 1.4rem;
+         }
+         h2 i { color: #6f86d6; /* Use a specific color if gradient isn't rendering well */ font-size: 1.2em; }
+
+
+        /* --- Input/Textarea/Conditional Styles --- */
+        /* ... (keep input/textarea styles) ... */
+         input[type="text"], textarea#infoText, #newEntryInput {
+              -webkit-user-select: text; -moz-user-select: text; -ms-user-select: text; user-select: text;
+         }
+         input[type="text"] {
+              padding: 12px; border: 1px solid var(--border-color-light); border-radius: var(--border-radius-small);
+              width: calc(100% - 26px); margin-bottom: 20px; font-size: 1rem; box-sizing: border-box; font-family: var(--font-family-main);
+         }
+         #vehicleName { width: calc(90% - 26px); margin-left: auto; margin-right: auto; display: block; }
+         textarea#infoText, .add-entry-container, #confirmButton {
+              opacity: 0; max-height: 0; margin: 0 auto; padding: 0; border-width: 0; overflow: hidden;
+              transition: opacity var(--transition-speed-fade) ease-out, max-height var(--transition-speed-fade) ease-out, margin var(--transition-speed-fade) ease-out, padding var(--transition-speed-fade) ease-out, border-width var(--transition-speed-fade) ease-out;
+              display: block;
+         }
+         #photoPage.show-details:not(.entries-confirmed) textarea#infoText {
+             opacity: 1; max-height: 150px; margin-bottom: 20px; padding: 12px; border: 1px solid var(--border-color-light);
+             height: 100px; resize: none; background: var(--input-bg-light); width: calc(90% - 26px);
+             font-family: monospace; border-radius: var(--border-radius-small); box-sizing: border-box;
+         }
+         #photoPage.show-details:not(.entries-confirmed) .add-entry-container,
+         #photoPage.show-details:not(.entries-confirmed) #confirmButton {
+             opacity: 1; max-height: 200px; margin-bottom: 20px; width: 90%;
+         }
+          #photoPage.entries-confirmed textarea#infoText,
+          #photoPage.entries-confirmed .add-entry-container,
+          #photoPage.entries-confirmed #confirmButton {
+              opacity: 0 !important; max-height: 0 !important; margin: 0 !important; padding: 0 !important; border-width: 0 !important;
+          }
+         .combo-container { position: relative; width: 100%; margin-bottom: 15px; }
+         #newEntryInput {
+             width: 100%; padding: 12px 20px; border: 1px solid var(--border-color-light);
+             border-radius: var(--border-radius-xlarge); font-size: 0.9rem; box-sizing: border-box;
+             background-color: var(--input-bg-light); transition: border-color var(--transition-speed) ease-out, box-shadow var(--transition-speed) ease-out;
+         }
+         #newEntryInput:focus { outline: none; border-color: #6f86d6; box-shadow: 0 0 0 3px rgba(111, 134, 214, 0.3); }
+
+
+        /* Button Container & General Button Styles */
+        /* ... (keep button styles) ... */
+         .button-container { display: flex; flex-wrap: wrap; gap: 15px; justify-content: center; margin-top: 25px; }
+         #photoPage:not(.show-details) #photoButtons.button-container,
+         #photoPage.entries-confirmed #photoButtons.button-container { margin-top: 5px; }
+         .button {
+             width: 90px; height: 90px; background: var(--gradient-button); border: none; border-radius: var(--border-radius-large);
+             color: var(--white-color); box-shadow: var(--shadow-main), var(--shadow-inset); display: flex; flex-direction: column;
+             justify-content: center; align-items: center; text-align: center; cursor: pointer; padding: 8px; box-sizing: border-box;
+             transition: all var(--transition-speed) ease-in-out; overflow: hidden;
+         }
+         .button:hover { filter: brightness(1.1); transform: translateY(-2px); box-shadow: 0px 8px 18px rgba(0, 0, 0, 0.15), var(--shadow-inset); }
+         .button:active { box-shadow: var(--shadow-inset-active); transform: scale(0.97); filter: brightness(0.95); }
+         .button img, .button i, .button span { pointer-events: none; }
+         .button img, .button i { width: 40px; height: 40px; border-radius: var(--border-radius-small); margin-bottom: 7px; font-size: 30px; line-height: 40px; object-fit: contain; color: var(--white-color); }
+         .button span { font-size: 12px; font-weight: 600; text-align: center; display: block; line-height: 1.2; width: 100%; }
+
+        /* --- Back Button Styles --- MODIFIED --- */
+        .back-button {
+            position: absolute; top: 10px; left: 10px; width: 120px; height: 50px; background: var(--gradient-back-button);
+            border: none; border-radius: var(--border-radius-xlarge); display: flex; align-items: center; justify-content: flex-start;
+            padding-left: 15px; gap: 10px;
+            opacity: 0; /* Start hidden */
+            pointer-events: none; /* Start non-interactive */
+            transition: opacity var(--transition-speed-opacity) ease-in-out, /* Opacity transition */
+                        filter var(--transition-speed) ease-in-out,
+                        box-shadow var(--transition-speed) ease-in-out,
+                        transform var(--transition-speed) ease-in-out;
+            cursor: pointer; box-shadow: var(--shadow-main); z-index: 10; color: var(--white-color); font-family: var(--font-family-main);
+        }
+         .back-button:hover { /* Keep hover effects */
+            filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.14);
+         }
+         .back-button:active { /* Keep active effects */
+             filter: brightness(0.95); transform: scale(0.98); box-shadow: var(--shadow-inset-active);
+         }
+        .back-button i, .back-button span { pointer-events: none; }
+        .back-button i { font-size: 24px; line-height: 1; }
+        .back-button span { font-size: 1rem; font-weight: bold; line-height: 1; }
+
+        /* Action Buttons Styles */
+        /* ... (keep action button styles) ... */
+         .action-button {
+             color: var(--white-color); border: none; padding: 12px 25px; border-radius: var(--border-radius-xlarge); cursor: pointer;
+             box-shadow: var(--shadow-main); width: 100%; font-weight: bold; font-size: 1rem; display: inline-flex; align-items: center;
+             justify-content: center; gap: 8px; transition: all var(--transition-speed) ease-in-out; font-family: var(--font-family-main); box-sizing: border-box;
+         }
+         .action-button:hover { filter: brightness(1.1); transform: translateY(-1px); box-shadow: 0px 6px 16px rgba(0, 0, 0, 0.14); }
+         .action-button:active { transform: scale(0.98); box-shadow: var(--shadow-inset-active); filter: brightness(0.95); }
+         .add-button { background: var(--gradient-add-button); }
+         #confirmButton { background: var(--gradient-confirm-button); }
+         .action-button i, .action-button span { pointer-events: none; }
+         .action-button i { font-size: 1.1em; }
+
+        /* --- Modal Styles --- */
+        /* ... (keep all modal styles) ... */
+         .modal-overlay {
+             position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+             background-color: rgba(0, 0, 0, 0.6); display: none;
+             align-items: center; justify-content: center; z-index: 1000;
+             opacity: 0; transition: opacity 0.3s ease;
+         }
+         .modal-overlay.visible { display: flex; opacity: 1; }
+         .modal {
+             background: var(--white-color); border-radius: var(--border-radius-medium); padding: 25px;
+             box-shadow: 0 8px 25px rgba(0,0,0,0.2); width: 90%; max-width: 450px;
+             text-align: center; position: relative; z-index: 1001;
+             transform: scale(0.95); transition: transform 0.3s ease;
+          }
+         .modal-overlay.visible .modal { transform: scale(1); }
+         .modal h3 {
+             margin-top: 0; margin-bottom: 15px; color: var(--text-color-dark); font-weight: 600;
+             display: flex; align-items: center; justify-content: center; gap: 8px; font-size: 1.2rem;
+         }
+         .modal h3 i, .modal h3 span { pointer-events: none; }
+         .modal h3 i { color: #6f86d6; /* Use a specific color if gradient isn't rendering well */ }
+         .modal-body {
+             margin-bottom: 15px; min-height: 150px; background-color: #eee; display: flex; align-items: center;
+             justify-content: center; border-radius: var(--border-radius-small); color: #777; font-style: italic;
+             position: relative; overflow: hidden;
+         }
+         .photo-counter-display { font-size: 0.9em; color: #555; margin-bottom: 20px; min-height: 1.2em; }
+         .modal-actions { display: flex; gap: 15px; justify-content: center; }
+         .modal-button { flex-grow: 1; padding: 10px 20px; font-size: 0.9rem; }
+         .snap-button { background: var(--gradient-modal-snap); }
+         .close-button { background: var(--gradient-modal-close); }
+         .download-button { background: var(--gradient-add-button); }
+         .retry-button { background: var(--gradient-modal-close); }
+         .snap-button:disabled { background: var(--border-color-light); cursor: not-allowed; filter: grayscale(50%); }
+
+         /* Stili per la fotocamera */
+         .camera-preview {
+             width: 100%; 
+             height: 100%;
+             object-fit: cover;
+         }
+         .photo-preview {
+             width: 100%;
+             height: 100%;
+             object-fit: contain;
+             background-color: #000;
+         }
+         .retry-button-container {
+             position: absolute;
+             bottom: 10px;
+             left: 0;
+             right: 0;
+             text-align: center;
+         }
+
+        /* Media Queries */
+        /* ... (keep media queries) ... */
+         @media (max-width: 400px) {
+              .container { padding: 20px 15px; }
+              h2 { font-size: 1.2rem; gap: 8px; } h2 i { font-size: 1.1em;}
+              .button { width: 75px; height: 75px; } .button img, .button i { width: 30px; height: 30px; font-size: 25px; line-height: 30px; } .button span { font-size: 10px; }
+              .back-button { width: 90px; height: 35px; padding-left: 10px; gap: 5px;} .back-button i { font-size: 18px; } .back-button span { font-size: 0.8rem; }
+              #newEntryInput, .action-button { font-size: 0.9rem; padding: 10px 20px; }
+              textarea#infoText { width: calc(100% - 22px); } .add-entry-container, #confirmButton { width: 100%; }
+              .modal h3 { font-size: 1rem; }
+              .modal-body { min-height: 100px; } .modal-button { font-size: 0.8rem; padding: 8px 15px; }
+         }
+         @media (max-height: 600px) and (max-width: 600px) {
+              h2 { margin-bottom: 15px; } .container { padding: 15px; }
+              .button { width: 80px; height: 80px; }
+         }
+
+    </style>
+</head>
+<body>
+
+    <!-- Page 1: Category Selection -->
+    <div class="container" id="selectionPage">
+        <h2> <i class="fas fa-car"></i> Seleziona una categoria </h2>
+        <input type="text" id="vehicleName" placeholder="Inserisci nome/targa veicolo">
+        <div class="button-container">
+             <div class="button" onclick="selectCategory('Auto')"> <img src="https://i.postimg.cc/H82fKzv6/auto.png" alt="Auto"> <span>Auto</span> </div>
+             <div class="button" onclick="selectCategory('Proiettori e Fanali')"> <img src="https://i.postimg.cc/N50st28K/Proiettori%20e%20Fanali.png" alt="Proiettori e Fanali"> <span>Proiettori<br>e Fanali</span> </div>
+             <div class="button" onclick="selectCategory('Lamierati')"> <img src="https://i.postimg.cc/xJRPK44T/lamierati.png" alt="Lamierati"> <span>Lamierati</span> </div>
+             <div class="button" onclick="selectCategory('Meccanica')"> <img src="https://i.postimg.cc/3y06FYXr/Meccanica.png" alt="Meccanica"> <span>Meccanica</span> </div>
+             <div class="button" onclick="selectCategory('Specchietto')"> <img src="https://i.postimg.cc/34TTydsQ/Specchietto.png" alt="Specchietto"> <span>Specchietto</span> </div>
+        </div>
+    </div>
+
+    <!-- Page 2: Photo Capture -->
+    <div class="container" id="photoPage" style="display:none;">
+        <div class="back-button" id="backButton" onclick="goBack()"> <i class="fas fa-arrow-left"></i> <span>BACK</span> </div>
+        <h2> <i class="fas fa-camera-retro"></i> <span id="selectedCategory"></span> </h2>
+        <textarea id="infoText" readonly placeholder="Informazioni aggiunte appariranno qui..."></textarea>
+        <div class="add-entry-container">
+            <div class="combo-container">
+                <input list="predefinedOptions" id="newEntryInput" placeholder="Seleziona o inserisci una voce">
+                <datalist id="predefinedOptions">
+                      <option value="Codice motore"> <option value="Numero pratica"> <option value="Impianto iniezione"> <option value="Numero telaio"> <option value="Codice riparazione"> <option value="Chilometraggio"> <option value="Note Aggiuntive">
+                </datalist>
+            </div>
+            <button class="add-button action-button" onclick="addEntry()"> <i class="fas fa-plus-circle"></i> <span>Aggiungi Voce</span> </button>
+        </div>
+        <button id="confirmButton" class="action-button" onclick="confirmEntries()"> <i class="fas fa-check-circle"></i> <span>Conferma Voci</span> </button>
+        <div class="button-container" id="photoButtons"></div>
+    </div>
+
+    <!-- Photo Modal Structure -->
+    <div id="photoModalOverlay" class="modal-overlay">
+         <div id="photoModal" class="modal">
+             <h3><i class="fas fa-camera"></i> <span id="modalTitle"></span></h3>
+             <div class="modal-body" id="cameraPreviewPlaceholder"></div>
+             <div class="photo-counter-display" id="photoCounterDisplay">Foto scattate: 0</div>
+             <div class="modal-actions">
+                 <button id="snapPhotoButton" class="action-button modal-button snap-button"> <i class="fas fa-camera"></i> <span class="snap-text">Scatta</span> </button>
+                 <button class="action-button modal-button close-button"> <i class="fas fa-times"></i> <span>Chiudi</span> </button>
+             </div>
+   <script>
+        // *** MODIFICHE PRINCIPALI SOLO ALLE FUNZIONI DELLA FOTOCAMERA ***
+
+        // --- Camera Functions ---
+        function initCamera() {
+            if (!modalBody) return;
+
+            modalBody.innerHTML = '';
+            
+            videoElement = document.createElement('video');
+            videoElement.id = 'cameraPreview';
+            videoElement.autoplay = true;
+            videoElement.playsinline = true;
+            videoElement.muted = true; // Aggiunto per mobile
+            videoElement.className = 'camera-preview';
+            
+            modalBody.appendChild(videoElement);
+
+            // Configurazione migliorata per mobile
+            const constraints = {
+                video: { 
+                    facingMode: 'environment',
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }
+            };
+
+            // Verifica supporto API
+            if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+                modalBody.innerHTML = 'La fotocamera non è supportata da questo browser';
+                return;
+            }
+
+            navigator.mediaDevices.getUserMedia(constraints)
+            .then(function(s) {
+                stream = s;
+                videoElement.srcObject = stream;
+                // Nuova gestione metadati
+                videoElement.onloadedmetadata = () => {
+                    videoElement.play().catch(error => {
+                        console.error("Errore play video:", error);
+                    });
+                };
+            })
+            .catch(function(err) {
+                console.error("Errore fotocamera:", err);
+                modalBody.innerHTML = 'Errore: consentire l\'accesso alla fotocamera nelle impostazioni del browser';
+            });
+        }
+
+        // --- Modal Functions ---
+        function openPhotoModal(title = "Scatta Foto") {
+            console.log(`---> [openPhotoModal] Opening modal with title: "${title}" <---`);
+            
+            // Nuovo loading state
+            if (modalBody) modalBody.innerHTML = '<div class="loading-message">Attivazione fotocamera...</div>';
+            
+            // Mostra prima il modal
+            document.body.classList.add('modal-open');
+            photoModalOverlay.classList.add('visible');
+            
+            // Ritardo per il rendering del modal
+            setTimeout(() => {
+                initCamera();
+            }, 300);
+
+            // Resto del codice esistente
+            if (modalTitle) modalTitle.textContent = title;
+            if (photoCounterDisplay) photoCounterDisplay.textContent = "Foto scattate: 0";
+            if (snapPhotoButton) {
+                snapPhotoButton.disabled = false;
+                const snapTextSpan = snapPhotoButton.querySelector('.snap-text'); 
+                if(snapTextSpan) snapTextSpan.textContent = "Scatta";
+                const snapIcon = snapPhotoButton.querySelector('i'); 
+                if(snapIcon) snapIcon.className = "fas fa-camera";
+            }
+            
+            updateDownloadButton();
+        }
+
+        // *** TUTTO IL RESTO DEL CODICE RIMANE IDENTICO ***
+        // ... (Il resto dello script esistente) ...
+        
+    </script>
+         </div>
+    </div>
+
+    <script>
+        // --- Global Variables ---
+        let currentSelectedCategory = "";
+        let photoCounter = 0;
+        // Variabili per la fotocamera e ZIP
+        let stream = null;
+        let videoElement = null;
+        let currentPhotoBlob = null;
+        let capturedPhotos = [];
+        let vehicleInfo = "";
+
+        // DOM Elements (cache references)
+        const vehicleNameInput = document.getElementById("vehicleName");
+        const selectionPage = document.getElementById("selectionPage");
+        const photoPage = document.getElementById("photoPage");
+        const selectedCategorySpan = document.getElementById("selectedCategory");
+        const infoTextArea = document.getElementById("infoText");
+        const photoButtonsContainer = document.getElementById("photoButtons");
+        const newEntryInput = document.getElementById('newEntryInput');
+        const predefinedOptionsDatalist = document.getElementById('predefinedOptions');
+        const backButton = document.getElementById("backButton");
+        const photoModalOverlay = document.getElementById('photoModalOverlay');
+        const photoModal = document.getElementById('photoModal');
+        const modalTitle = document.getElementById('modalTitle');
+        const photoCounterDisplay = document.getElementById('photoCounterDisplay');
+        const snapPhotoButton = document.getElementById('snapPhotoButton');
+        const closeModalButton = document.querySelector('.close-button');
+        const modalBody = document.querySelector('.modal-body');
+
+        // --- Data ---
+        const categoryButtonsData = {
+            "Auto": ["Frontale", "Posteriore", "Angolo FR DX", "Angolo FR SX", "Angolo PO DX", "Angolo PO SX", "Interni", "Cruscotto"],
+            "Proiettori e Fanali": ["Proiettore DX", "Proiettore SX", "Fanale Post. DX", "Fanale Post. SX", "Fendinebbia"],
+            "Lamierati": ["Paraurti Ant.", "Paraurti Post.", "Cofano", "Portiera Ant.DX", "Portiera Ant.SX", "Portiera Post.DX", "Portiera Post.SX", "Parafango Ant.DX", "Parafango Ant.SX", "Tetto", "Baule"],
+            "Meccanica": ["Cambio", "Motore Inf.", "Sosp. Ant. DX", "Sosp. Ant. SX", "Sosp. Post. DX", "Sosp. Post. SX","Scarico", "Radiatore"],
+            "Specchietto": ["Specchietto DX", "Specchietto SX", "Vetro DX", "Vetro SX", "Calotta DX", "Calotta SX"]
+        };
+
+        // --- Core Functions ---
+        function selectCategory(category) {
+            console.log("[selectCategory] Called with:", category);
+            const vehicleName = vehicleNameInput ? vehicleNameInput.value.trim() : '';
+            if (!vehicleName) {
+                alert("Errore: Inserisci nome/targa veicolo.");
+                if (vehicleNameInput) vehicleNameInput.focus(); return;
+            }
+            currentSelectedCategory = category;
+            if (selectedCategorySpan) selectedCategorySpan.textContent = category;
+            if (infoTextArea) infoTextArea.value = `Veicolo: ${vehicleName}\nCategoria: ${category}`;
+
+            if (photoButtonsContainer) {
+                photoButtonsContainer.innerHTML = "";
+                const buttonLabels = categoryButtonsData[category] || [];
+                buttonLabels.forEach(label => {
+                    const button = document.createElement("div");
+                    button.className = "button photo-button";
+                    let iconHtml = '<i class="fas fa-camera"></i>';
+                    button.innerHTML = `${iconHtml}<span>${label}</span>`;
+                    if (photoButtonsContainer) photoButtonsContainer.appendChild(button);
+                });
+            }
+
+            if (photoPage) {
+                photoPage.classList.remove('show-details', 'entries-confirmed');
+                photoPage.style.display = "block";
+                if (backButton) {
+                    backButton.style.opacity = "1";
+                    backButton.style.pointerEvents = "auto";
+                    console.log("[selectCategory] Back button made VISIBLE.");
+                }
+            }
+            if (selectionPage) selectionPage.style.display = "none";
+            console.log("[selectCategory] Photo page displayed for:", category);
+        }
+
+        function handlePhotoButtonClick(event) {
+            console.log("--- [handlePhotoButtonClick] CLICK DETECTED ---");
+            const clickedButton = event.target.closest('.button.photo-button');
+            if (!clickedButton) {
+                console.log("[handlePhotoButtonClick] Click target wasn't a photo button or its child.");
+                return;
+            }
+
+            if (!photoPage) { console.error("[handlePhotoButtonClick] FATAL: photoPage element missing!"); return; }
+
+            const isConfirmed = photoPage.classList.contains('entries-confirmed');
+            const spanElement = clickedButton.querySelector('span');
+            const photoLabel = spanElement ? spanElement.textContent : 'Etichetta_ERR';
+            console.log(`[handlePhotoButtonClick] Button: "${photoLabel}". Confirmed State: ${isConfirmed}`);
+
+            if (!isConfirmed) {
+                console.log("[handlePhotoButtonClick] Action: Showing details section.");
+                if (!photoPage.classList.contains('show-details')) {
+                    photoPage.classList.add('show-details');
+                    if (newEntryInput) newEntryInput.focus();
+                }
+            } else {
+                console.log("[handlePhotoButtonClick] Action: Entries ARE confirmed.");
+                console.log(`***** [handlePhotoButtonClick] INTENDING TO OPEN MODAL for: "${photoLabel}" *****`);
+                console.log("[handlePhotoButtonClick] Calling openPhotoModal now...");
+                openPhotoModal(photoLabel);
+                console.log("[handlePhotoButtonClick] openPhotoModal called.");
+            }
+            console.log("--- [handlePhotoButtonClick] END ---");
+        }
+
+        // Attach listener
+        if (photoButtonsContainer) {
+            photoButtonsContainer.addEventListener('click', handlePhotoButtonClick);
+            console.log("[Init] Listener attached to photoButtonsContainer.");
+        } else {
+            console.error("[Init] CRITICAL: photoButtonsContainer not found.");
+        }
+
+        function addEntry() {
+            console.log("[addEntry] called");
+            if (!photoPage || !newEntryInput || !infoTextArea || !predefinedOptionsDatalist) { console.error("[addEntry] Missing elements"); return; }
+            if (!photoPage.classList.contains('show-details') || photoPage.classList.contains('entries-confirmed')) {
+                console.warn("[addEntry] Not active state."); return;
+            }
+            const entry = newEntryInput.value.trim();
+            if (entry) {
+                console.log("[addEntry] Adding:", entry);
+                infoTextArea.value += (infoTextArea.value.endsWith('\n') || infoTextArea.value === '' ? '' : '\n') + entry;
+                const options = Array.from(predefinedOptionsDatalist.options || []).map(opt => opt.value);
+                if (!options.includes(entry)) {
+                    const newOption = document.createElement('option'); newOption.value = entry;
+                    predefinedOptionsDatalist.appendChild(newOption);
+                }
+                newEntryInput.value = ''; newEntryInput.focus();
+            } else {
+                console.warn("[addEntry] Empty input.");
+                newEntryInput.placeholder = "Inserisci un valore qui!"; newEntryInput.style.borderColor = 'red';
+                setTimeout(() => { if (newEntryInput) { newEntryInput.placeholder = "Seleziona o inserisci una voce"; newEntryInput.style.borderColor = ''; } }, 1500);
+            }
+        }
+
+        function confirmEntries() {
+            console.log("[confirmEntries] called");
+            if (!photoPage || !photoPage.classList.contains('show-details') || photoPage.classList.contains('entries-confirmed')) { console.warn("[confirmEntries] Invalid state."); return; }
+            photoPage.classList.add('entries-confirmed');
+            console.log("===> [confirmEntries] Entries CONFIRMED. Class added. <===");
+            const initialModalTitle = `Foto Agg. per ${currentSelectedCategory || 'Cat.'}`;
+            console.log("[confirmEntries] Opening initial modal:", initialModalTitle);
+            openPhotoModal(initialModalTitle);
+        }
+
+        function goBack() {
+            console.log("[goBack] called");
+            if (backButton) {
+                backButton.style.opacity = "0";
+                backButton.style.pointerEvents = "none";
+                console.log("[goBack] Back button HIDDEN.");
+            }
+
+            if (!photoPage || !selectionPage || !infoTextArea || !newEntryInput || !photoButtonsContainer) {
+                console.error("[goBack] Missing elements"); return;
+            }
+            if (photoModalOverlay && photoModalOverlay.classList.contains('visible')) {
+                closePhotoModal(false);
+            }
+            document.body.classList.remove('modal-open');
+
+            photoPage.style.display = "none";
+            photoPage.classList.remove('show-details', 'entries-confirmed');
+            infoTextArea.value = "";
+            newEntryInput.value = "";
+            photoButtonsContainer.innerHTML = "";
+            capturedPhotos = [];
+
+            selectionPage.style.display = "block";
+            if(vehicleNameInput) vehicleNameInput.focus();
+
+            currentSelectedCategory = "";
+            if(selectedCategorySpan) selectedCategorySpan.textContent = "";
+            photoCounter = 0;
+            console.log("[goBack] Returned to selection page.");
+        }
+
+        // Add keypress listener
+        if (newEntryInput) {
+            newEntryInput.addEventListener('keypress', function(event) {
+                if (event.key === 'Enter' && photoPage && photoPage.classList.contains('show-details') && !photoPage.classList.contains('entries-confirmed')) {
+                    event.preventDefault(); addEntry();
+                }
+            });
+        } else { console.error("[Init] newEntryInput not found."); }
+
+        // --- Camera Functions ---
+        function initCamera() {
+            if (!modalBody) return;
+
+            modalBody.innerHTML = '';
+            
+            videoElement = document.createElement('video');
+            videoElement.id = 'cameraPreview';
+            videoElement.autoplay = true;
+            videoElement.playsinline = true;
+            videoElement.className = 'camera-preview';
+            
+            modalBody.appendChild(videoElement);
+
+            navigator.mediaDevices.getUserMedia({ 
+                video: { 
+                    facingMode: 'environment',
+                    width: { ideal: 1280 },
+                    height: { ideal: 720 }
+                }, 
+                audio: false 
+            })
+            .then(function(s) {
+                stream = s;
+                videoElement.srcObject = stream;
+            })
+            .catch(function(err) {
+                console.error("Errore fotocamera:", err);
+                modalBody.innerHTML = 'Errore: impossibile accedere alla fotocamera.';
+            });
+        }
+
+        function stopCamera() {
+            if (stream) {
+                stream.getTracks().forEach(track => track.stop());
+                stream = null;
+            }
+            if (videoElement) {
+                videoElement.srcObject = null;
+                videoElement = null;
+            }
+        }
+
+        function snapPhoto() {
+            if (!videoElement || !stream) return;
+
+            const canvas = document.createElement('canvas');
+            canvas.width = videoElement.videoWidth;
+            canvas.height = videoElement.videoHeight;
+            const ctx = canvas.getContext('2d');
+            
+            ctx.drawImage(videoElement, 0, 0, canvas.width, canvas.height);
+            
+            canvas.toBlob(function(blob) {
+                currentPhotoBlob = blob;
+                
+                const imgPreview = document.createElement('img');
+                imgPreview.src = URL.createObjectURL(blob);
+                imgPreview.className = 'photo-preview';
+                
+                const retryButton = document.createElement('button');
+                retryButton.className = 'action-button modal-button retry-button';
+                retryButton.innerHTML = '<i class="fas fa-redo"></i> <span>Riprova</span>';
+                retryButton.onclick = function() {
+                    modalBody.innerHTML = '';
+                    initCamera();
+                    snapPhotoButton.disabled = false;
+                    const snapTextSpan = snapPhotoButton.querySelector('.snap-text'); 
+                    if(snapTextSpan) snapTextSpan.textContent = "Scatta";
+                    const snapIcon = snapPhotoButton.querySelector('i'); 
+                    if(snapIcon) snapIcon.className = "fas fa-camera";
+                };
+
+                modalBody.innerHTML = '';
+                modalBody.appendChild(imgPreview);
+                
+                const retryContainer = document.createElement('div');
+                retryContainer.className = 'retry-button-container';
+                retryContainer.appendChild(retryButton);
+                modalBody.appendChild(retryContainer);
+
+                // Aggiungi la foto all'array
+                capturedPhotos.push({
+                    blob: currentPhotoBlob,
+                    filename: `${vehicleNameInput.value}_${currentSelectedCategory}_${photoCounter+1}.jpg`,
+                    label: modalTitle.textContent
+                });
+                
+                photoCounter++;
+                if(photoCounterDisplay) photoCounterDisplay.textContent = `Foto scattate: ${photoCounter}`;
+                
+                // Aggiorna il pulsante di download
+                updateDownloadButton();
+            }, 'image/jpeg', 0.9);
+        }
+
+        function updateDownloadButton() {
+            const modalActions = document.querySelector('.modal-actions');
+            const existingDownloadBtn = document.getElementById('downloadButton');
+            
+            if (capturedPhotos.length > 0) {
+                if (!existingDownloadBtn && modalActions) {
+                    const downloadBtn = document.createElement('button');
+                    downloadBtn.id = 'downloadButton';
+                    downloadBtn.className = 'action-button modal-button download-button';
+                    downloadBtn.innerHTML = '<i class="fas fa-download"></i> <span>Scarica ZIP</span>';
+                    downloadBtn.onclick = downloadZip;
+                    modalActions.insertBefore(downloadBtn, snapPhotoButton.nextSibling);
+                }
+            } else if (existingDownloadBtn) {
+                existingDownloadBtn.remove();
+            }
+        }
+
+        // --- ZIP Functions ---
+        function downloadZip() {
+            if (!vehicleNameInput || !infoTextArea) return;
+            
+            const zip = new JSZip();
+            const vehicleName = vehicleNameInput.value.trim() || 'VeicoloSenzaNome';
+            
+            // Aggiungi il file di testo
+            zip.file(`${vehicleName}_info.txt`, infoTextArea.value);
+            
+            // Aggiungi le foto
+            capturedPhotos.forEach((photo, index) => {
+                zip.file(photo.filename, photo.blob);
+            });
+            
+            // Genera e scarica il ZIP
+            zip.generateAsync({type: 'blob'}).then(function(content) {
+                saveAs(content, `${vehicleName}_${currentSelectedCategory}_foto.zip`);
+            });
+        }
+
+        // --- Modal Functions ---
+        function openPhotoModal(title = "Scatta Foto") {
+            console.log(`---> [openPhotoModal] Opening modal with title: "${title}" <---`);
+            if (backButton) {
+                backButton.style.opacity = "0";
+                backButton.style.pointerEvents = "none";
+                console.log("[openPhotoModal] Back button hidden.");
+            }
+
+            if (!modalTitle || !photoCounterDisplay || !snapPhotoButton || !photoModalOverlay) { 
+                console.error("[openPhotoModal] Missing modal elements"); 
+                return; 
+            }
+            
+            photoCounter = 0;
+            if (modalTitle) modalTitle.textContent = title;
+            if (photoCounterDisplay) photoCounterDisplay.textContent = "Foto scattate: 0";
+            if (snapPhotoButton) {
+                snapPhotoButton.disabled = false;
+                const snapTextSpan = snapPhotoButton.querySelector('.snap-text'); 
+                if(snapTextSpan) snapTextSpan.textContent = "Scatta";
+                const snapIcon = snapPhotoButton.querySelector('i'); 
+                if(snapIcon) snapIcon.className = "fas fa-camera";
+            }
+            
+            // Inizializza la fotocamera
+            initCamera();
+            
+            // Aggiorna il pulsante di download
+            updateDownloadButton();
+            
+            document.body.classList.add('modal-open');
+            photoModalOverlay.classList.add('visible');
+            console.log("[openPhotoModal] Modal opened. Body class added.");
+        }
+
+        function closePhotoModal(setFocus = true) {
+            console.log("[closePhotoModal] Closing modal. setFocus:", setFocus);
+            stopCamera();
+            
+            if (!photoModalOverlay) return;
+            photoModalOverlay.classList.remove('visible');
+            document.body.classList.remove('modal-open');
+
+            if (photoPage && photoPage.style.display === 'block' && backButton) {
+                backButton.style.opacity = "1";
+                backButton.style.pointerEvents = "auto";
+                console.log("[closePhotoModal] Back button RESTORED.");
+            }
+
+            console.log(`[closePhotoModal] Modal closed. Body class removed. Photos: ${photoCounter}`);
+            if(setFocus && photoButtonsContainer) {
+                const firstBtn = photoButtonsContainer.querySelector('.button.photo-button');
+                if(firstBtn) { console.log("[closePhotoModal] Setting focus."); setTimeout(() => firstBtn.focus(), 100); }
+            }
+        }
+
+        // Event listeners
+        if (photoModalOverlay) {
+            photoModalOverlay.addEventListener('click', function(event) {
+                if (event.target === photoModalOverlay) { 
+                    console.log("[OverlayClick] Closing modal."); 
+                    closePhotoModal(); 
+                }
+            });
+        } else { console.error("[Init] photoModalOverlay not found."); }
+
+        if (snapPhotoButton) {
+            snapPhotoButton.addEventListener('click', snapPhoto);
+        }
+
+        if (closeModalButton) {
+            closeModalButton.addEventListener('click', function() {
+                closePhotoModal();
+            });
+        }
+
+        // Cleanup on page leave
+        window.addEventListener('beforeunload', function() {
+            stopCamera();
+        });
+
+        // --- Initial Setup ---
+        console.log("--- Script Loaded & Initializing ---");
+        if (backButton) {
+            backButton.style.opacity = "0";
+            backButton.style.pointerEvents = "none";
+        }
+        console.log("--- Initialization Complete ---");
+    </script>
+</body>
+</html>

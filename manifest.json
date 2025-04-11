@@ -1,0 +1,21 @@
+
+{
+  "name": "Scatta Foto Veicolo",
+  "short_name": "Foto Veicolo",
+  "start_url": "index.html",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#48c6ef",
+  "icons": [
+    {
+      "src": "https://i.postimg.cc/H82fKzv6/auto.png",
+      "sizes": "192x192",
+      "type": "image/png"
+    },
+    {
+      "src": "https://i.postimg.cc/H82fKzv6/auto.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    }
+  ]
+}
